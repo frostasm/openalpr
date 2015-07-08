@@ -56,6 +56,11 @@ namespace alpr
       int maxDetectionInputWidth;
       int maxDetectionInputHeight;
       
+      int platesRoiX;
+      int platesRoiY;
+      int platesRoiWidth;
+      int platesRoiHeight;
+
       bool skipDetection;
 
       std::string prewarp;

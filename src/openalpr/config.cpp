@@ -163,6 +163,11 @@ namespace alpr
     maxDetectionInputWidth = getInt(ini, "", "max_detection_input_width", 1280);
     maxDetectionInputHeight = getInt(ini, "", "max_detection_input_height", 768);
 
+    platesRoiX = getInt(ini, "", "plates_roi_x", 0);
+    platesRoiY = getInt(ini, "", "plates_roi_y", 0);
+    platesRoiWidth = getInt(ini, "", "plates_roi_width", 0);
+    platesRoiHeight = getInt(ini, "", "plates_roi_height", 0);
+
     skipDetection = getBoolean(ini, "", "skip_detection", false);
     
     prewarp = getString(ini, "", "prewarp", "");

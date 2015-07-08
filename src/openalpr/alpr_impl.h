@@ -111,6 +111,7 @@ namespace alpr
       std::vector<AlprCoordinate> getCharacterPoints(cv::Rect char_rect, cv::Mat transmtx);
       std::vector<cv::Rect> convertRects(std::vector<AlprRegionOfInterest> regionsOfInterest);
 
+      std::vector<cv::Rect> intersectedRects(std::vector<cv::Rect> rects, const cv::Rect &overlap);
   };
 }
 

@@ -1,5 +1,6 @@
 *~
 src/.idea/*
+src/CMakeLists.txt.user*
 build/
 windows/
 scratch/

@@ -350,7 +350,13 @@ namespace alpr
       regionsOfInterest.push_back(fullFrame);
     }
 
-    return this->recognize(img, this->convertRects(regionsOfInterest));
+    std::vector<cv::Rect> cvRegionsOfInterest = this->convertRects(regionsOfInterest);
+
+    cv::Rect platesRoi(config->platesRoiX, config->platesRoiY, config->platesRoiWidth, config->platesRoiHeight);
+    if(platesRoi.width > 0 && platesRoi.height > 0)
+        cvRegionsOfInterest = this->intersectedRects(cvRegionsOfInterest, platesRoi);
+
+    return this->recognize(img, cvRegionsOfInterest);
   }
 
   AlprResults AlprImpl::recognize(cv::Mat img)
@@ -377,6 +383,19 @@ namespace alpr
      }
 
      return rectRegions;
+   }
+
+   std::vector<Rect> AlprImpl::intersectedRects(std::vector<Rect> rects, const Rect &rect)
+   {
+     std::vector<Rect> intersectedRects;
+     for (unsigned int i = 0; i < rects.size(); i++)
+     {
+       cv::Rect intersected = rect & rects[i];
+       if(intersected.width > 0 && intersected.height > 0)
+         intersectedRects.push_back(intersected);
+     }
+
+     return intersectedRects;
    }
 
   string AlprImpl::toJson( const AlprResults results )
