@@ -167,7 +167,8 @@ int main( int argc, const char** argv )
       framenum++;
     }
   }
-  else if (startsWith(filename, "http://") || startsWith(filename, "https://"))
+  else if (startsWith(filename, "http://") || startsWith(filename, "https://")
+           || startsWith(filename, "rtsp://") || startsWith(filename, "rtspt://") || startsWith(filename, "rtspu://"))
   {
     int framenum = 0;
     
