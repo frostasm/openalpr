@@ -6,6 +6,7 @@
 
 #include "daemon/beanstalk.hpp"
 #include "video/logging_videobuffer.h"
+#include "motiondetector.h"
 
 #include "tclap/CmdLine.h"
 #include "alpr.h"
@@ -53,7 +54,48 @@ struct CaptureThreadData
   bool output_images;
   std::string output_image_folder;
   int top_n;
+
+  bool detect_motion;
+
+  int motion_mog_history_size;
+  double motion_mog_var_threshold;
+  bool motion_mog_detect_shadows;
+  int motion_noise_erase_element_size;
+  bool motion_debug_show_images;
+
+  int motion_roi_x;
+  int motion_roi_y;
+  int motion_roi_width;
+  int motion_roi_height;
 };
+
+CaptureThreadData* makeCaptureThreadDataFromIni(const CSimpleIniA &ini) {
+    CaptureThreadData* tdata = new CaptureThreadData();
+
+    tdata->country_code = ini.GetValue("daemon", "country", "us");;
+    tdata->top_n = ini.GetLongValue("daemon", "topn", 20);
+
+    tdata->output_images = ini.GetBoolValue("daemon", "store_plates", false);
+    tdata->output_image_folder = ini.GetValue("daemon", "store_plates_location", "/tmp/");
+    tdata->company_id = ini.GetValue("daemon", "company_id", "");
+    tdata->site_id = ini.GetValue("daemon", "site_id", "");
+
+    tdata->detect_motion = ini.GetBoolValue("daemon", "detect_motion", false);
+
+    tdata->motion_roi_x = ini.GetLongValue("daemon", "motion_roi_x", 0);
+    tdata->motion_roi_y = ini.GetLongValue("daemon", "motion_roi_y", 0);
+    tdata->motion_roi_width = ini.GetLongValue("daemon", "motion_roi_width", 0);
+    tdata->motion_roi_height = ini.GetLongValue("daemon", "motion_roi_height", 0);
+
+    tdata->motion_mog_history_size = ini.GetLongValue("daemon", "motion_mog_history_size", 500);
+    tdata->motion_mog_var_threshold = ini.GetDoubleValue("daemon", "motion_mog_var_threshold", 16.0);
+    tdata->motion_mog_detect_shadows = ini.GetBoolValue("daemon", "motion_mog_detect_shadows", false);
+    tdata->motion_noise_erase_element_size = ini.GetLongValue("daemon", "motion_noise_erase_element_size", 200);
+
+    tdata->motion_debug_show_images = ini.GetBoolValue("daemon", "motion_debug_show_images", false);
+
+    return tdata;
+}
 
 struct UploadThreadData
 {
@@ -195,16 +237,10 @@ int main( int argc, const char** argv )
     return 1;
   }
   
-  std::string country = ini.GetValue("daemon", "country", "us");
-  int topn = ini.GetLongValue("daemon", "topn", 20);
-  
-  bool storePlates = ini.GetBoolValue("daemon", "store_plates", false);
   std::string imageFolder = ini.GetValue("daemon", "store_plates_location", "/tmp/");
   bool uploadData = ini.GetBoolValue("daemon", "upload_data", false);
   std::string upload_url = ini.GetValue("daemon", "upload_address", "");
-  std::string company_id = ini.GetValue("daemon", "company_id", "");
-  std::string site_id = ini.GetValue("daemon", "site_id", "");
-  
+
   LOG4CPLUS_INFO(logger, "Using: " << daemonConfigFile << " for daemon configuration");
   LOG4CPLUS_INFO(logger, "Using: " << imageFolder << " for storing valid plate images");
   
@@ -216,18 +252,13 @@ int main( int argc, const char** argv )
     if (pid == (pid_t) 0)
     {
       // This is the child process, kick off the capture data and upload threads
-      CaptureThreadData* tdata = new CaptureThreadData();
+      CaptureThreadData* tdata = makeCaptureThreadDataFromIni(ini);
       tdata->stream_url = stream_urls[i];
       tdata->camera_id = i + 1;
       tdata->config_file = openAlprConfigFile;
-      tdata->output_images = storePlates;
-      tdata->output_image_folder = imageFolder;
-      tdata->country_code = country;
-      tdata->company_id = company_id;
-      tdata->site_id = site_id;
-      tdata->top_n = topn;
       tdata->clock_on = clockOn;
-      
+
+
       tthread::thread* thread_recognize = new tthread::thread(streamRecognitionThread, (void*) tdata);
       
       if (uploadData)
@@ -253,7 +284,6 @@ int main( int argc, const char** argv )
 
 }
 
-
 void streamRecognitionThread(void* arg)
 {
   CaptureThreadData* tdata = (CaptureThreadData*) arg;
@@ -264,6 +294,10 @@ void streamRecognitionThread(void* arg)
   Alpr alpr(tdata->country_code, tdata->config_file);
   alpr.setTopN(tdata->top_n);
   
+  MotionDetector motiondetector(tdata->motion_mog_history_size, tdata->motion_mog_var_threshold, tdata->motion_mog_detect_shadows,
+                                tdata->motion_debug_show_images);
+  motiondetector.setErodeElementSize(tdata->motion_noise_erase_element_size);
+  motiondetector.setRoi(cv::Rect(tdata->motion_roi_x, tdata->motion_roi_y, tdata->motion_roi_width, tdata->motion_roi_height));
   
   int framenum = 0;
   
@@ -289,9 +323,21 @@ void streamRecognitionThread(void* arg)
       getTimeMonotonic(&startTime);
       
       std::vector<AlprRegionOfInterest> regionsOfInterest;
-      regionsOfInterest.push_back(AlprRegionOfInterest(0,0, latestFrame.cols, latestFrame.rows));
+      if (tdata->detect_motion)
+      {
+          if (framenum == 0) motiondetector.ResetMotionDetection(&latestFrame);
 
-      AlprResults results = alpr.recognize(latestFrame.data, latestFrame.elemSize(), latestFrame.cols, latestFrame.rows, regionsOfInterest);
+          cv::Rect rectan = motiondetector.MotionDetect(&latestFrame);
+          if (rectan.width>0) regionsOfInterest.push_back(AlprRegionOfInterest(rectan.x, rectan.y, rectan.width, rectan.height));
+      }
+      else
+      {
+          regionsOfInterest.push_back(AlprRegionOfInterest(0,0, latestFrame.cols, latestFrame.rows));
+      }
+
+      AlprResults results;
+      if(regionsOfInterest.size() > 0)
+        results = alpr.recognize(latestFrame.data, latestFrame.elemSize(), latestFrame.cols, latestFrame.rows, regionsOfInterest);
       
       timespec endTime;
       getTimeMonotonic(&endTime);
@@ -352,6 +398,7 @@ void streamRecognitionThread(void* arg)
     }
     
     usleep(10000);
+    framenum++;
   }
   
   
@@ -495,3 +542,4 @@ bool uploadPost(CURL* curl, std::string url, std::string data)
 
   
 }
+
