@@ -47,6 +47,10 @@ if ( NOT DEFINED WITH_UTILITIES )
   SET(WITH_UTILITIES ON)
 ENDIF()
 
+if ( NOT DEFINED BUILD_SHARED )
+  SET(BUILD_SHARED ON)
+ENDIF()
+
 IF (WIN32 AND WITH_DAEMON) 
   MESSAGE(WARNING "Skipping alprd daemon installation, as it is not supported in Windows.")
   SET(WITH_DAEMON OFF)
@@ -96,8 +100,16 @@ ADD_EXECUTABLE( alpr  main.cpp )
 if (WIN32) 
    SET(OPENALPR_LIB openalpr-static)
 ELSE()
-   SET(OPENALPR_LIB openalpr)
+
+  if (BUILD_SHARED)
+    SET(OPENALPR_LIB openalpr)
+  ELSE()
+    SET(OPENALPR_LIB openalpr-static)
+  ENDIF()
+
 ENDIF()
+
+
 
 TARGET_LINK_LIBRARIES(alpr
 	${OPENALPR_LIB}
@@ -113,7 +125,7 @@ IF (WITH_DAEMON)
   ADD_EXECUTABLE( alprd  daemon.cpp daemon/beanstalk.c daemon/beanstalk.cc )
 
   TARGET_LINK_LIBRARIES(alprd
-	  openalpr
+    ${OPENALPR_LIB}
 	  support
       video
 	  curl
