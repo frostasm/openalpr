@@ -59,7 +59,6 @@ namespace alpr
       frame.copyTo(frame_gray);
     }
 
-
     vector<PlateRegion> detectedRegions;   
     for (int i = 0; i < regionsOfInterest.size(); i++)
     {
@@ -70,7 +69,8 @@ namespace alpr
         continue;
       
       Mat cropped = frame_gray(regionsOfInterest[i]);
-      vector<PlateRegion> subRegions = doCascade(cropped, regionsOfInterest[i].x, regionsOfInterest[i].y);
+      cv::Point offset(regionsOfInterest[i].x, regionsOfInterest[i].y);
+      vector<PlateRegion> subRegions = doCascade(cropped, offset, frame.size());
 
       for (int j = 0; j < subRegions.size(); j++)
         detectedRegions.push_back(subRegions[j]);
@@ -78,31 +78,33 @@ namespace alpr
     return detectedRegions;
   }
 
-  vector<PlateRegion> DetectorCPU::doCascade(Mat frame, int offset_x, int offset_y)
+  vector<PlateRegion> DetectorCPU::doCascade(Mat croppedFrame, Point offset, Size frameSize)
   {
 
-    int w = frame.size().width;
-    int h = frame.size().height;
+    int w = croppedFrame.size().width;
+    int h = croppedFrame.size().height;
 
-    float scale_factor = computeScaleFactor(w, h);
-    
+    float scale_factor = computeScaleFactor(frameSize.width, frameSize.height);
+
     vector<Rect> plates;
 
-    equalizeHist( frame, frame );
+    equalizeHist( croppedFrame, croppedFrame );
     
-    if (scale_factor != 1.0)
-      resize(frame, frame, Size(w * scale_factor, h * scale_factor));
+    if (fabs(1.0-scale_factor) > 0.01) { // not need resizing if scale almost equal 1.0
+      resize(croppedFrame, croppedFrame, Size(w * scale_factor, h * scale_factor));
+    }
 
     //-- Detect plates
     timespec startTime;
     getTimeMonotonic(&startTime);
 
-    float maxWidth = ((float) w) * (config->maxPlateWidthPercent / 100.0f) * scale_factor;
-    float maxHeight = ((float) h) * (config->maxPlateHeightPercent / 100.0f) * scale_factor;
+    float maxWidth = ((float) frameSize.width) * (config->maxPlateWidthPercent / 100.0f) * scale_factor;
+    float maxHeight = ((float) frameSize.height) * (config->maxPlateHeightPercent / 100.0f) * scale_factor;
+
     Size minSize(config->minPlateSizeWidthPx * scale_factor, config->minPlateSizeHeightPx * scale_factor);
     Size maxSize(maxWidth, maxHeight);
 
-    plate_cascade.detectMultiScale( frame, plates, config->detection_iteration_increase, config->detectionStrictness,
+    plate_cascade.detectMultiScale( croppedFrame, plates, config->detection_iteration_increase, config->detectionStrictness,
                                       0,
                                       //0|CV_HAAR_SCALE_IMAGE,
                                       minSize, maxSize );
@@ -125,8 +127,8 @@ namespace alpr
       // Ensure that the rectangle isn't < 0 or > maxWidth/Height
       plates[i] = expandRect(plates[i], 0, 0, w, h);
       
-      plates[i].x = plates[i].x + offset_x;
-      plates[i].y = plates[i].y + offset_y;
+      plates[i].x = plates[i].x + offset.x;
+      plates[i].y = plates[i].y + offset.y;
     }
 
     vector<PlateRegion> orderedRegions = aggregateRegions(plates);

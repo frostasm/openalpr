@@ -45,7 +45,7 @@ namespace alpr
 
       cv::CascadeClassifier plate_cascade;
 
-      std::vector<PlateRegion> doCascade(cv::Mat frame, int offset_x, int offset_y);
+      std::vector<PlateRegion> doCascade(cv::Mat croppedFrame, cv::Point offset, cv::Size frameSize);
   };
 
 }

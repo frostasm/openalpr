@@ -58,7 +58,7 @@ namespace alpr
   float Detector::computeScaleFactor(int width, int height) {
     
     float scale_factor = 1.0;
-    
+
     if (width > config->maxDetectionInputWidth)
     {
       // The frame is too wide
@@ -80,7 +80,10 @@ namespace alpr
     
   }
 
-  bool rectHasLargerArea(cv::Rect a, cv::Rect b) { return a.area() < b.area(); };
+  bool rectHasLargerArea(cv::Rect a, cv::Rect b)
+  {
+      return a.area() < b.area();
+  }
 
   vector<PlateRegion> Detector::aggregateRegions(vector<Rect> regions)
   {
