@@ -288,24 +288,38 @@ bool is_supported_image(std::string image_file)
 bool detectandshow( Alpr* alpr, cv::Mat frame, std::string region, bool writeJson)
 {
 
-  timespec startTime;
-  getTimeMonotonic(&startTime);
+    timespec totalStart;
+    getTimeMonotonic(&totalStart);
 
   std::vector<AlprRegionOfInterest> regionsOfInterest;
   if (do_motiondetection)
   {
-	  cv::Rect rectan = motiondetector.MotionDetect(&frame);
-	  if (rectan.width>0) regionsOfInterest.push_back(AlprRegionOfInterest(rectan.x, rectan.y, rectan.width, rectan.height));
+
+      cv::Rect rectan = motiondetector.MotionDetect(&frame);
+      if (rectan.width>0) regionsOfInterest.push_back(AlprRegionOfInterest(rectan.x, rectan.y, rectan.width, rectan.height));
+
+      timespec motiondetectorEnd;
+      getTimeMonotonic(&motiondetectorEnd);
+      double motiondetectorProcessingTime = diffclock(totalStart, motiondetectorEnd);
+
+      if (measureProcessingTime)
+      {
+          std::cout << "motion detection in: " << motiondetectorProcessingTime  << "ms." << std::endl;
+      }
+
   }
   else regionsOfInterest.push_back(AlprRegionOfInterest(0, 0, frame.cols, frame.rows));
+
   AlprResults results;
   if (regionsOfInterest.size()>0) results = alpr->recognize(frame.data, frame.elemSize(), frame.cols, frame.rows, regionsOfInterest);
 
-  timespec endTime;
-  getTimeMonotonic(&endTime);
-  double totalProcessingTime = diffclock(startTime, endTime);
-  if (measureProcessingTime)
-    std::cout << "Total Time to process image: " << totalProcessingTime << "ms." << std::endl;
+  if (measureProcessingTime) {
+      timespec endTime;
+      getTimeMonotonic(&endTime);
+      double totalProcessingTime = diffclock(totalStart, endTime);
+
+    std::cout << "Total time to process image: " << totalProcessingTime << "ms." << std::endl;
+  }
   
   
   if (writeJson)

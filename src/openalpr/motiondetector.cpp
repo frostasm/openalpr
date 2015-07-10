@@ -41,6 +41,7 @@ void MotionDetector::ResetMotionDetection(cv::Mat* frame)
 cv::Rect MotionDetector::MotionDetect(cv::Mat* frame)
 //Detect motion and create ONE recangle that contains all the detected motion
 {
+
 	std::vector<std::vector<cv::Point> > contours;
 	std::vector<cv::Vec4i> hierarchy;
 	cv::Rect bounding_rect;

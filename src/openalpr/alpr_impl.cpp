@@ -271,7 +271,7 @@ namespace alpr
 
     if (config->debugTiming)
     {
-      cout << "Total Time to process image: " << diffclock(startTime, endTime) << "ms." << endl;
+      cout << "Total time to recognize image: " << diffclock(startTime, endTime) << "ms." << endl;
     }
 
     if (config->debugGeneral && config->debugShowImages)

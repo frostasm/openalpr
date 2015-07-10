@@ -319,33 +319,48 @@ void streamRecognitionThread(void* arg)
     if (response != -1)
     {
       
-      timespec startTime;
-      getTimeMonotonic(&startTime);
       
       std::vector<AlprRegionOfInterest> regionsOfInterest;
       if (tdata->detect_motion)
       {
+
           if (framenum == 0) motiondetector.ResetMotionDetection(&latestFrame);
+
+          timespec motiondetectorStart;
+          getTimeMonotonic(&motiondetectorStart);
 
           cv::Rect rectan = motiondetector.MotionDetect(&latestFrame);
           if (rectan.width>0) regionsOfInterest.push_back(AlprRegionOfInterest(rectan.x, rectan.y, rectan.width, rectan.height));
+
+          timespec motiondetectorEnd;
+          getTimeMonotonic(&motiondetectorEnd);
+          double motiondetectorProcessingTime = diffclock(motiondetectorStart, motiondetectorEnd);
+
+          if (tdata->clock_on)
+          {
+            LOG4CPLUS_INFO(logger, "Camera " << tdata->camera_id << " motion detection in: " << motiondetectorProcessingTime << " ms.");
+          }
+
       }
       else
       {
           regionsOfInterest.push_back(AlprRegionOfInterest(0,0, latestFrame.cols, latestFrame.rows));
       }
 
+      timespec recognizeStart;
+      getTimeMonotonic(&recognizeStart);
+
       AlprResults results;
       if(regionsOfInterest.size() > 0)
         results = alpr.recognize(latestFrame.data, latestFrame.elemSize(), latestFrame.cols, latestFrame.rows, regionsOfInterest);
       
-      timespec endTime;
-      getTimeMonotonic(&endTime);
-      double totalProcessingTime = diffclock(startTime, endTime);
+      timespec recognizeEnd;
+      getTimeMonotonic(&recognizeEnd);
+      double recognizeProcessingTime = diffclock(recognizeStart, recognizeEnd);
       
       if (tdata->clock_on)
       {
-	LOG4CPLUS_INFO(logger, "Camera " << tdata->camera_id << " processed frame in: " << totalProcessingTime << " ms.");
+    LOG4CPLUS_INFO(logger, "Camera " << tdata->camera_id << " recognize frame in: " << recognizeProcessingTime << " ms.");
       }
       
       if (results.plates.size() > 0)
