@@ -22,9 +22,58 @@
 #include <log4cplus/consoleappender.h>
 #include <log4cplus/fileappender.h>
 
+#include <queue>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+
+template <typename T>
+class Queue
+{
+ public:
+
+  bool pop(T& item)
+  {
+    std::unique_lock<std::mutex> mlock(mutex_);
+    if(queue_.empty()) {
+        return false;
+    }
+    else
+    {
+        item = queue_.front();
+        queue_.pop();
+        if(queue_.size() % 100 == 0)
+            std::cout << "pop item: " << queue_.size() << std::endl;
+
+        return true;
+    }
+  }
+
+  void push(const T& item)
+  {
+    std::unique_lock<std::mutex> mlock(mutex_);
+    queue_.push(item);
+    if(queue_.size() % 100 == 0)
+        std::cout << "push item: " << queue_.size() << std::endl;
+    mlock.unlock();
+    cond_.notify_one();
+  }
+  Queue()=default;
+  Queue(const Queue&) = delete;            // disable copying
+  Queue& operator=(const Queue&) = delete; // disable assignment
+
+ private:
+  std::queue<T> queue_;
+  std::mutex mutex_;
+  std::condition_variable cond_;
+};
+typedef std::pair<cv::Mat, cv::Rect> RecognizeData;
+typedef Queue<RecognizeData> RecognizeQueue;
+
 using namespace alpr;
 
 // prototypes
+void streamCaptureThread(void* arg);
 void streamRecognitionThread(void* arg);
 bool writeToQueue(std::string jsonResult);
 bool uploadPost(CURL* curl, std::string url, std::string data);
@@ -42,6 +91,7 @@ const std::string BEANSTALK_TUBE_NAME="alprd";
 
 struct CaptureThreadData
 {
+  RecognizeQueue recognizingQueue;
   std::string company_id;
   std::string stream_url;
   std::string site_id;
@@ -67,6 +117,8 @@ struct CaptureThreadData
   int motion_roi_y;
   int motion_roi_width;
   int motion_roi_height;
+
+
 };
 
 CaptureThreadData* makeCaptureThreadDataFromIni(const CSimpleIniA &ini) {
@@ -259,17 +311,21 @@ int main( int argc, const char** argv )
       tdata->clock_on = clockOn;
 
 
-      tthread::thread* thread_recognize = new tthread::thread(streamRecognitionThread, (void*) tdata);
+      tthread::thread* thread_recognize;
+      thread_recognize = new tthread::thread(streamRecognitionThread, (void*) tdata);
+//      thread_recognize = new tthread::thread(streamRecognitionThread, (void*) tdata);
+
+      usleep(10000);
+      tthread::thread* thread_capture = new tthread::thread(streamCaptureThread, (void*) tdata);
       
       if (uploadData)
       {
-	// Kick off the data upload thread
-	UploadThreadData* udata = new UploadThreadData();
-	udata->upload_url = upload_url;
-	tthread::thread* thread_upload = new tthread::thread(dataUploadThread, (void*) udata );
+    // Kick off the data upload thread
+    UploadThreadData* udata = new UploadThreadData();
+    udata->upload_url = upload_url;
+    tthread::thread* thread_upload = new tthread::thread(dataUploadThread, (void*) udata );
       }
       
-      break;
     }
 
     // Parent process will continue and spawn more children
@@ -286,13 +342,85 @@ int main( int argc, const char** argv )
 
 void streamRecognitionThread(void* arg)
 {
+
+    CaptureThreadData* tdata = (CaptureThreadData*) arg;
+
+    Alpr alpr(tdata->country_code, tdata->config_file);
+    alpr.setTopN(tdata->top_n);
+    RecognizeData recData;
+  while (daemon_active) {
+
+      bool pop = tdata->recognizingQueue.pop(recData);
+      if(!pop) {
+          usleep(1000);
+          continue;
+      }
+
+      cv::Mat &latestFrame = recData.first;
+      cv::Rect roi = recData.second;
+
+      std::vector<AlprRegionOfInterest> rois;
+      rois.push_back(AlprRegionOfInterest(roi.x, roi.y, roi.width, roi.height));
+
+      AlprResults results;
+      results = alpr.recognize(latestFrame.data, latestFrame.elemSize(), latestFrame.cols, latestFrame.rows, rois);
+
+      if (results.plates.size() > 0)
+      {
+
+        std::stringstream uuid_ss;
+        uuid_ss << tdata->site_id << "-cam" << tdata->camera_id << "-" << getEpochTimeMs();
+    std::string uuid = uuid_ss.str();
+
+    // Save the image to disk (using the UUID)
+    if (tdata->output_images)
+    {
+      std::stringstream ss;
+      ss << tdata->output_image_folder << "/" << uuid << ".jpg";
+
+      cv::imwrite(ss.str(), latestFrame);
+    }
+
+    // Update the JSON content to include UUID and camera ID
+
+    std::string json = alpr.toJson(results);
+
+    cJSON *root = cJSON_Parse(json.c_str());
+    cJSON_AddStringToObject(root,	"uuid",		uuid.c_str());
+    cJSON_AddNumberToObject(root,	"camera_id",	tdata->camera_id);
+    cJSON_AddStringToObject(root, 	"site_id", 	tdata->site_id.c_str());
+    cJSON_AddNumberToObject(root,	"img_width",	latestFrame.cols);
+    cJSON_AddNumberToObject(root,	"img_height",	latestFrame.rows);
+
+        // Add the company ID to the output if configured
+        if (tdata->company_id.length() > 0)
+          cJSON_AddStringToObject(root, 	"company_id", 	tdata->company_id.c_str());
+
+    char *out;
+    out=cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+
+    std::string response(out);
+
+    free(out);
+
+    // Push the results to the Beanstalk queue
+    for (int j = 0; j < results.plates.size(); j++)
+    {
+      LOG4CPLUS_DEBUG(logger, "Writing plate " << results.plates[j].bestPlate.characters << " (" <<  uuid << ") to queue.");
+    }
+
+    writeToQueue(response);
+      }
+    }
+}
+
+void streamCaptureThread(void* arg)
+{
   CaptureThreadData* tdata = (CaptureThreadData*) arg;
   
   LOG4CPLUS_INFO(logger, "country: " << tdata->country_code << " -- config file: " << tdata->config_file );
   LOG4CPLUS_INFO(logger, "Stream " << tdata->camera_id << ": " << tdata->stream_url);
-  
-  Alpr alpr(tdata->country_code, tdata->config_file);
-  alpr.setTopN(tdata->top_n);
   
   MotionDetector motiondetector(tdata->motion_mog_history_size, tdata->motion_mog_var_threshold, tdata->motion_mog_detect_shadows,
                                 tdata->motion_debug_show_images);
@@ -322,83 +450,24 @@ void streamRecognitionThread(void* arg)
       timespec startTime;
       getTimeMonotonic(&startTime);
       
-      std::vector<AlprRegionOfInterest> regionsOfInterest;
+      cv::Rect roi;
       if (tdata->detect_motion)
       {
           if (framenum == 0) motiondetector.ResetMotionDetection(&latestFrame);
-
-          cv::Rect rectan = motiondetector.MotionDetect(&latestFrame);
-          if (rectan.width>0) regionsOfInterest.push_back(AlprRegionOfInterest(rectan.x, rectan.y, rectan.width, rectan.height));
+          roi = motiondetector.MotionDetect(&latestFrame);
       }
       else
       {
-          regionsOfInterest.push_back(AlprRegionOfInterest(0,0, latestFrame.cols, latestFrame.rows));
+          roi = cv::Rect(0,0, latestFrame.cols, latestFrame.rows);
       }
 
-      AlprResults results;
-      if(regionsOfInterest.size() > 0)
-        results = alpr.recognize(latestFrame.data, latestFrame.elemSize(), latestFrame.cols, latestFrame.rows, regionsOfInterest);
-      
-      timespec endTime;
-      getTimeMonotonic(&endTime);
-      double totalProcessingTime = diffclock(startTime, endTime);
-      
-      if (tdata->clock_on)
-      {
-	LOG4CPLUS_INFO(logger, "Camera " << tdata->camera_id << " processed frame in: " << totalProcessingTime << " ms.");
+      if(roi.area() > 0) {
+        tdata->recognizingQueue.push(RecognizeData(latestFrame.clone(), roi));
       }
-      
-      if (results.plates.size() > 0)
-      {
-        
-        std::stringstream uuid_ss;
-        uuid_ss << tdata->site_id << "-cam" << tdata->camera_id << "-" << getEpochTimeMs();
-	std::string uuid = uuid_ss.str();
-        
-	// Save the image to disk (using the UUID)
-	if (tdata->output_images)
-	{
-	  std::stringstream ss;
-	  ss << tdata->output_image_folder << "/" << uuid << ".jpg";
-	  
-	  cv::imwrite(ss.str(), latestFrame);
-	}
-	
-	// Update the JSON content to include UUID and camera ID
-  
-	std::string json = alpr.toJson(results);
-	
-	cJSON *root = cJSON_Parse(json.c_str());
-	cJSON_AddStringToObject(root,	"uuid",		uuid.c_str());
-	cJSON_AddNumberToObject(root,	"camera_id",	tdata->camera_id);
-	cJSON_AddStringToObject(root, 	"site_id", 	tdata->site_id.c_str());
-	cJSON_AddNumberToObject(root,	"img_width",	latestFrame.cols);
-	cJSON_AddNumberToObject(root,	"img_height",	latestFrame.rows);
-
-        // Add the company ID to the output if configured
-        if (tdata->company_id.length() > 0)
-          cJSON_AddStringToObject(root, 	"company_id", 	tdata->company_id.c_str());
-
-	char *out;
-	out=cJSON_PrintUnformatted(root);
-	cJSON_Delete(root);
-	
-	std::string response(out);
-	
-	free(out);
-	
-	// Push the results to the Beanstalk queue
-	for (int j = 0; j < results.plates.size(); j++)
-	{
-	  LOG4CPLUS_DEBUG(logger, "Writing plate " << results.plates[j].bestPlate.characters << " (" <<  uuid << ") to queue.");
-	}
-	
-	writeToQueue(response);
-      }
-    }
     
     usleep(10000);
     framenum++;
+    }
   }
   
   
