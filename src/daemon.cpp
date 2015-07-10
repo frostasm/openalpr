@@ -22,6 +22,8 @@
 #include <log4cplus/consoleappender.h>
 #include <log4cplus/fileappender.h>
 
+#include <string>
+#include <atomic>
 #include <queue>
 #include <thread>
 #include <mutex>
@@ -42,7 +44,7 @@ class Queue
     {
         item = queue_.front();
         queue_.pop();
-        if(queue_.size() % 100 == 0)
+        if(queue_.size() % 100 == 0 && queue_.size() )
             std::cout << "pop item: " << queue_.size() << std::endl;
 
         return true;
@@ -63,6 +65,9 @@ class Queue
   Queue& operator=(const Queue&) = delete; // disable assignment
 
  private:
+  // TODO: add limit realization
+  int limit = 200;
+
   std::queue<T> queue_;
   std::mutex mutex_;
   std::condition_variable cond_;
@@ -91,7 +96,9 @@ const std::string BEANSTALK_TUBE_NAME="alprd";
 
 struct CaptureThreadData
 {
-  RecognizeQueue recognizingQueue;
+  RecognizeQueue recognizingQueues[2];
+  int recognizersCount;
+
   std::string company_id;
   std::string stream_url;
   std::string site_id;
@@ -219,14 +226,20 @@ int main( int argc, const char** argv )
   }
   
   std::string openAlprConfigFile = configDir + OPENALPR_CONFIG_FILE_NAME;
+  std::string openAlprConfigFile1 = configDir + OPENALPR_CONFIG_FILE_NAME+"1";
+  std::string openAlprConfigFile2 = configDir + OPENALPR_CONFIG_FILE_NAME+"2";
+
   std::string daemonConfigFile = configDir + ALPRD_CONFIG_FILE_NAME;
   
+  int recognizersCount = fileExists(openAlprConfigFile2.c_str()) ? 2 : 1;
+
   // Validate that the configuration files exist
-  if (fileExists(openAlprConfigFile.c_str()) == false)
+  if (fileExists(openAlprConfigFile1.c_str()) == false)
   {
-    std::cerr << "error, openalpr.conf file does not exist at: " << openAlprConfigFile << std::endl;
+    std::cerr << "error, openalpr.conf file does not exist at: " << openAlprConfigFile1 << std::endl;
     return 1;
   }
+
   if (fileExists(daemonConfigFile.c_str()) == false)
   {
     std::cerr << "error, alprd.conf file does not exist at: " << daemonConfigFile << std::endl;
@@ -309,11 +322,16 @@ int main( int argc, const char** argv )
       tdata->camera_id = i + 1;
       tdata->config_file = openAlprConfigFile;
       tdata->clock_on = clockOn;
+      tdata->recognizersCount = recognizersCount;
 
 
       tthread::thread* thread_recognize;
       thread_recognize = new tthread::thread(streamRecognitionThread, (void*) tdata);
-//      thread_recognize = new tthread::thread(streamRecognitionThread, (void*) tdata);
+      if (fileExists(openAlprConfigFile2.c_str()))
+      {
+          std::cout << "start second thread;" << std::endl;
+        thread_recognize = new tthread::thread(streamRecognitionThread, (void*) tdata);
+      }
 
       usleep(10000);
       tthread::thread* thread_capture = new tthread::thread(streamCaptureThread, (void*) tdata);
@@ -340,17 +358,22 @@ int main( int argc, const char** argv )
 
 }
 
+unsigned char recognitionThreadsCounter = 0;
 void streamRecognitionThread(void* arg)
 {
 
-    CaptureThreadData* tdata = (CaptureThreadData*) arg;
+    int threadNumber = recognitionThreadsCounter;
+    ++recognitionThreadsCounter;
 
-    Alpr alpr(tdata->country_code, tdata->config_file);
+    CaptureThreadData* tdata = (CaptureThreadData*) arg;
+    std::string configFile = tdata->config_file+std::to_string(threadNumber+1);
+    std::cout << "Load config: " << configFile  << std::endl;
+    Alpr alpr(tdata->country_code, configFile);
     alpr.setTopN(tdata->top_n);
     RecognizeData recData;
   while (daemon_active) {
 
-      bool pop = tdata->recognizingQueue.pop(recData);
+      bool pop = tdata->recognizingQueues[threadNumber].pop(recData);
       if(!pop) {
           usleep(1000);
           continue;
@@ -376,6 +399,7 @@ void streamRecognitionThread(void* arg)
     if (tdata->output_images)
     {
       std::stringstream ss;
+// "-thread-" << std::to_string(threadNumber+1) <<
       ss << tdata->output_image_folder << "/" << uuid << ".jpg";
 
       cv::imwrite(ss.str(), latestFrame);
@@ -461,8 +485,10 @@ void streamCaptureThread(void* arg)
           roi = cv::Rect(0,0, latestFrame.cols, latestFrame.rows);
       }
 
-      if(roi.area() > 0) {
-        tdata->recognizingQueue.push(RecognizeData(latestFrame.clone(), roi));
+      if(roi.area() > 0) { // Todo: add minimum size
+        tdata->recognizingQueues[0].push(RecognizeData(latestFrame.clone(), roi));
+        if(tdata->recognizersCount > 1)
+            tdata->recognizingQueues[1].push(RecognizeData(latestFrame.clone(), roi));
       }
     
     usleep(10000);

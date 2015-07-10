@@ -107,7 +107,9 @@ namespace alpr
     Mat grayImg = img;
     if (img.channels() > 2)
       cvtColor( img, grayImg, CV_BGR2GRAY );
-    
+
+    // WORK with warp
+
     // Prewarp the image and ROIs if configured]
     std::vector<cv::Rect> warpedRegionsOfInterest = regionsOfInterest;
     // Warp the image if prewarp is provided
@@ -264,7 +266,9 @@ namespace alpr
     // Unwarp plate regions if necessary
     prewarp->projectPlateRegions(warpedPlateRegions, grayImg.cols, grayImg.rows, true);
     response.plateRegions = warpedPlateRegions;
-    
+
+    // End working with warp
+
     timespec endTime;
     getTimeMonotonic(&endTime);
     response.results.total_processing_time_ms = diffclock(startTime, endTime);
