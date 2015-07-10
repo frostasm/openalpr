@@ -1,5 +1,13 @@
 project(src)
 
+  if (CMAKE_VERSION VERSION_LESS "3.1")
+    if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
+      set (CMAKE_CXX_FLAGS "--std=gnu++11 ${CMAKE_C_FLAGS}")
+    endif ()
+  else ()
+    set (CMAKE_CXX_STANDARD 11)
+  endif ()
+
 #set(CMAKE_BUILD_TYPE Debug)
 cmake_minimum_required (VERSION 2.6)
 
