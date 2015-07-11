@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 #include <sstream>
+#include <fstream>
 #include <execinfo.h>
 
 #include "daemon/beanstalk.hpp"
@@ -434,16 +435,6 @@ bool saveRecognitionResults(const Alpr& alpr, const AlprResults& results, const 
   uuid_ss << tdata->site_id << "-cam" << tdata->camera_id << "-" << epochTimeMs;
   std::string filename_uuid = uuid_ss.str();
 
-  // Save the image to disk (using the UUID)
-  if (tdata->output_images)
-  {
-    std::stringstream ss;
-    // "-thread-" << std::to_string(threadNumber+1) <<
-    ss << tdata->output_image_folder << "/" << filename_uuid << ".jpg";
-
-    cv::imwrite(ss.str(), latestFrame);
-  }
-
   // Update the JSON content to include UUID and camera ID
 
   std::string json = alpr.toJson(results);
@@ -460,11 +451,30 @@ bool saveRecognitionResults(const Alpr& alpr, const AlprResults& results, const 
     cJSON_AddStringToObject(root, 	"company_id", 	tdata->company_id.c_str());
 
   char *out;
-  out=cJSON_PrintUnformatted(root);
+  out=cJSON_Print(root);
   cJSON_Delete(root);
 
   std::string response(out);
   free(out);
+
+  // Save the image to disk (using the UUID)
+  if (tdata->output_images)
+  {
+      { // save image
+          std::stringstream ssjpg;
+          // "-thread-" << std::to_string(threadNumber+1) <<
+          ssjpg << tdata->output_image_folder << "/" << filename_uuid << ".jpg";
+          cv::imwrite(ssjpg.str(), latestFrame);
+      }
+
+      { // save json
+          std::stringstream ssjson;
+          ssjson << tdata->output_image_folder << "/" << filename_uuid << ".json";
+          std::ofstream outputJson( ssjson.str() );
+          if( outputJson )
+              outputJson << response;
+      }
+  }
 
   // Push the results to the Beanstalk queue
   for (int j = 0; j < results.plates.size(); j++)
