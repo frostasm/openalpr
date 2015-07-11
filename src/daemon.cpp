@@ -32,19 +32,20 @@
 template <typename T>
 class Queue
 {
- public:
+public:
 
   bool pop(T& item)
   {
     std::unique_lock<std::mutex> mlock(mutex_);
-    if(queue.empty()) {
-        return false;
+    if (queue.empty())
+    {
+      return false;
     }
     else
     {
-        item = queue.front();
-        queue.pop();
-        return true;
+      item = queue.front();
+      queue.pop();
+      return true;
     }
   }
 
@@ -52,8 +53,8 @@ class Queue
   {
     std::unique_lock<std::mutex> mlock(mutex_);
 
-    if(queue.size() > maximumSize)
-        removeOddItems();
+    if (queue.size() > maximumSize)
+      removeOddItems();
 
     queue.push(item);
 
@@ -65,21 +66,23 @@ class Queue
   Queue(const Queue&) = delete;            // disable copying
   Queue& operator=(const Queue&) = delete; // disable assignment
 
- private:
+private:
 
   static const int maximumSize = 101; // ! Must be odd
-  void removeOddItems() {
-      static_assert(maximumSize % 2 == 1, "Mmaximum queue size must be odd");
-      static_assert(maximumSize > 50, "Mmaximum queue size to small. must be > 50");
-      std::cout << "Queue reached its maximum size: " << maximumSize << std::endl;
-      std::queue<T> qOdd;
-      while(!queue.empty()) {
-          qOdd.push(queue.front());
-          queue.pop();
-          queue.pop();
-      }
+  void removeOddItems()
+  {
+    static_assert(maximumSize % 2 == 1, "Mmaximum queue size must be odd");
+    static_assert(maximumSize > 50, "Mmaximum queue size to small. must be > 50");
+    std::cout << "Queue reached its maximum size: " << maximumSize << std::endl;
+    std::queue<T> qOdd;
+    while (!queue.empty())
+    {
+      qOdd.push(queue.front());
+      queue.pop();
+      queue.pop();
+    }
 
-      queue.swap(qOdd);
+    queue.swap(qOdd);
   }
 
   std::queue<T> queue;
@@ -118,9 +121,9 @@ struct CaptureThreadData
   std::string stream_url;
   std::string site_id;
   int camera_id;
-  
+
   bool clock_on;
-  
+
   std::string config_file;
   std::string country_code;
   bool output_images;
@@ -140,35 +143,41 @@ struct CaptureThreadData
   int motion_roi_width;
   int motion_roi_height;
 
+  int motion_min_width_for_recognition;
+  int motion_min_height_for_recognition;
 
 };
 
-CaptureThreadData* makeCaptureThreadDataFromIni(const CSimpleIniA &ini) {
-    CaptureThreadData* tdata = new CaptureThreadData();
+CaptureThreadData* makeCaptureThreadDataFromIni(const CSimpleIniA& ini)
+{
+  CaptureThreadData* tdata = new CaptureThreadData();
 
-    tdata->country_code = ini.GetValue("daemon", "country", "us");;
-    tdata->top_n = ini.GetLongValue("daemon", "topn", 20);
+  tdata->country_code = ini.GetValue("daemon", "country", "us");;
+  tdata->top_n = ini.GetLongValue("daemon", "topn", 20);
 
-    tdata->output_images = ini.GetBoolValue("daemon", "store_plates", false);
-    tdata->output_image_folder = ini.GetValue("daemon", "store_plates_location", "/tmp/");
-    tdata->company_id = ini.GetValue("daemon", "company_id", "");
-    tdata->site_id = ini.GetValue("daemon", "site_id", "");
+  tdata->output_images = ini.GetBoolValue("daemon", "store_plates", false);
+  tdata->output_image_folder = ini.GetValue("daemon", "store_plates_location", "/tmp/");
+  tdata->company_id = ini.GetValue("daemon", "company_id", "");
+  tdata->site_id = ini.GetValue("daemon", "site_id", "");
 
-    tdata->detect_motion = ini.GetBoolValue("daemon", "detect_motion", false);
+  tdata->detect_motion = ini.GetBoolValue("daemon", "detect_motion", false);
 
-    tdata->motion_roi_x = ini.GetLongValue("daemon", "motion_roi_x", 0);
-    tdata->motion_roi_y = ini.GetLongValue("daemon", "motion_roi_y", 0);
-    tdata->motion_roi_width = ini.GetLongValue("daemon", "motion_roi_width", 0);
-    tdata->motion_roi_height = ini.GetLongValue("daemon", "motion_roi_height", 0);
+  tdata->motion_roi_x = ini.GetLongValue("daemon", "motion_roi_x", 0);
+  tdata->motion_roi_y = ini.GetLongValue("daemon", "motion_roi_y", 0);
+  tdata->motion_roi_width = ini.GetLongValue("daemon", "motion_roi_width", 0);
+  tdata->motion_roi_height = ini.GetLongValue("daemon", "motion_roi_height", 0);
 
-    tdata->motion_mog_history_size = ini.GetLongValue("daemon", "motion_mog_history_size", 500);
-    tdata->motion_mog_var_threshold = ini.GetDoubleValue("daemon", "motion_mog_var_threshold", 16.0);
-    tdata->motion_mog_detect_shadows = ini.GetBoolValue("daemon", "motion_mog_detect_shadows", false);
-    tdata->motion_noise_erase_element_size = ini.GetLongValue("daemon", "motion_noise_erase_element_size", 200);
+  tdata->motion_mog_history_size = ini.GetLongValue("daemon", "motion_mog_history_size", 500);
+  tdata->motion_mog_var_threshold = ini.GetDoubleValue("daemon", "motion_mog_var_threshold", 16.0);
+  tdata->motion_mog_detect_shadows = ini.GetBoolValue("daemon", "motion_mog_detect_shadows", false);
+  tdata->motion_noise_erase_element_size = ini.GetLongValue("daemon", "motion_noise_erase_element_size", 200);
 
-    tdata->motion_debug_show_images = ini.GetBoolValue("daemon", "motion_debug_show_images", false);
+  tdata->motion_min_width_for_recognition = ini.GetLongValue("daemon", "motion_min_width_for_recognition", 60);
+  tdata->motion_min_height_for_recognition = ini.GetLongValue("daemon", "motion_min_height_for_recognition", 15);
 
-    return tdata;
+  tdata->motion_debug_show_images = ini.GetBoolValue("daemon", "motion_debug_show_images", false);
+
+  return tdata;
 }
 
 struct UploadThreadData
@@ -176,7 +185,8 @@ struct UploadThreadData
   std::string upload_url;
 };
 
-void segfault_handler(int sig) {
+void segfault_handler(int sig)
+{
   void *array[10];
   size_t size;
 
@@ -201,7 +211,7 @@ int main( int argc, const char** argv )
   bool noDaemon = false;
   bool clockOn = false;
   std::string logFile;
-  
+
   std::string configDir;
 
   TCLAP::CmdLine cmd("OpenAlpr Daemon", ' ', Alpr::getVersion());
@@ -214,11 +224,11 @@ int main( int argc, const char** argv )
 
   try
   {
-    
+
     cmd.add( configDirArg );
     cmd.add( logFileArg );
 
-    
+
     if (cmd.parse( argc, argv ) == false)
     {
       // Error occured while parsing.  Exit now.
@@ -229,23 +239,23 @@ int main( int argc, const char** argv )
     configDir = configDirArg.getValue();
     if (hasEnding(configDir, "/") == false)
       configDir = configDir + "/";
-    
+
     logFile = logFileArg.getValue();
     noDaemon = daemonOffSwitch.getValue();
     clockOn = clockSwitch.getValue();
   }
-  catch (TCLAP::ArgException &e)    // catch any exceptions
+  catch (TCLAP::ArgException& e)    // catch any exceptions
   {
     std::cerr << "error: " << e.error() << " for arg " << e.argId() << std::endl;
     return 1;
   }
-  
+
   std::string openAlprConfigFile = configDir + OPENALPR_CONFIG_FILE_NAME;
   std::string openAlprConfigFile1 = configDir + OPENALPR_CONFIG_FILE_NAME+"1";
   std::string openAlprConfigFile2 = configDir + OPENALPR_CONFIG_FILE_NAME+"2";
 
   std::string daemonConfigFile = configDir + ALPRD_CONFIG_FILE_NAME;
-  
+
   int recognitionThreadsCount = fileExists(openAlprConfigFile2.c_str()) ? 2 : 1;
 
   // Validate that the configuration files exist
@@ -260,23 +270,23 @@ int main( int argc, const char** argv )
     std::cerr << "error, alprd.conf file does not exist at: " << daemonConfigFile << std::endl;
     return 1;
   }
-  
+
   log4cplus::BasicConfigurator config;
   config.configure();
-    
+
   if (noDaemon == false)
   {
     // Fork off into a separate daemon
     daemon(0, 0);
-    
-    
+
+
     log4cplus::SharedAppenderPtr myAppender(new log4cplus::RollingFileAppender(logFile));
     myAppender->setName("alprd_appender");
     // Redirect std out to log file
     logger = log4cplus::Logger::getInstance(LOG4CPLUS_TEXT("alprd"));
     logger.addAppender(myAppender);
-    
-    
+
+
     LOG4CPLUS_INFO(logger, "Running OpenALPR daemon in daemon mode.");
   }
   else
@@ -286,18 +296,18 @@ int main( int argc, const char** argv )
     // Redirect std out to log file
     logger = log4cplus::Logger::getInstance(LOG4CPLUS_TEXT("alprd"));
     //logger.addAppender(myAppender);
-    
+
     LOG4CPLUS_INFO(logger, "Running OpenALPR daemon in the foreground.");
   }
-  
+
   CSimpleIniA ini;
   ini.SetMultiKey();
-  
+
   ini.LoadFile(daemonConfigFile.c_str());
-  
+
   std::vector<std::string> stream_urls;
-  
-  
+
+
   CSimpleIniA::TNamesDepend values;
   ini.GetAllValues("daemon", "stream", values);
 
@@ -306,26 +316,27 @@ int main( int argc, const char** argv )
 
   // output all of the items
   CSimpleIniA::TNamesDepend::const_iterator i;
-  for (i = values.begin(); i != values.end(); ++i) { 
-      stream_urls.push_back(i->pItem);
+  for (i = values.begin(); i != values.end(); ++i)
+  {
+    stream_urls.push_back(i->pItem);
   }
-  
-  
+
+
   if (stream_urls.size() == 0)
   {
     LOG4CPLUS_FATAL(logger, "No video streams defined in the configuration.");
     return 1;
   }
-  
+
   std::string imageFolder = ini.GetValue("daemon", "store_plates_location", "/tmp/");
   bool uploadData = ini.GetBoolValue("daemon", "upload_data", false);
   std::string upload_url = ini.GetValue("daemon", "upload_address", "");
 
   LOG4CPLUS_INFO(logger, "Using: " << daemonConfigFile << " for daemon configuration");
   LOG4CPLUS_INFO(logger, "Using: " << imageFolder << " for storing valid plate images");
-  
+
   pid_t pid;
-  
+
   for (int i = 0; i < stream_urls.size(); i++)
   {
     pid = fork();
@@ -344,21 +355,21 @@ int main( int argc, const char** argv )
       recognition_thread = new tthread::thread(platesRecognitionThread, (void*) tdata);
       if (fileExists(openAlprConfigFile2.c_str()))
       {
-          std::cout << "start second thread;" << std::endl;
+        std::cout << "Start second recognition thread;" << std::endl;
         recognition_thread = new tthread::thread(platesRecognitionThread, (void*) tdata);
       }
 
       usleep(10000);
       tthread::thread* thread_capture = new tthread::thread(streamCaptureThread, (void*) tdata);
-      
+
       if (uploadData)
       {
-    // Kick off the data upload thread
-    UploadThreadData* udata = new UploadThreadData();
-    udata->upload_url = upload_url;
-    tthread::thread* thread_upload = new tthread::thread(dataUploadThread, (void*) udata );
+        // Kick off the data upload thread
+        UploadThreadData* udata = new UploadThreadData();
+        udata->upload_url = upload_url;
+        tthread::thread* thread_upload = new tthread::thread(dataUploadThread, (void*) udata );
       }
-      
+
     }
 
     // Parent process will continue and spawn more children
@@ -373,149 +384,159 @@ int main( int argc, const char** argv )
 
 }
 
+bool saveRecognitionResults(const Alpr& alpr, const AlprResults&, const cv::Mat&, const CaptureThreadData * const);
+
 unsigned char recognitionThreadsCounter = 0;
 void platesRecognitionThread(void* arg)
 {
 
-    int threadNumber = recognitionThreadsCounter;
-    ++recognitionThreadsCounter;
+  int threadNumber = recognitionThreadsCounter;
+  ++recognitionThreadsCounter;
 
-    CaptureThreadData* tdata = (CaptureThreadData*) arg;
-    std::string configFile = tdata->config_file+std::to_string(threadNumber+1);
-    std::cout << "Load config: " << configFile  << std::endl;
-    Alpr alpr(tdata->country_code, configFile);
-    alpr.setTopN(tdata->top_n);
-    RecognitionData recData;
-  while (daemon_active) {
+  CaptureThreadData* tdata = (CaptureThreadData*) arg;
+  std::string configFile = tdata->config_file+std::to_string(threadNumber+1);
 
-      bool pop = tdata->recognitionQueues[threadNumber].pop(recData);
-      if(!pop) {
-          usleep(1000);
-          continue;
-      }
+  Alpr alpr(tdata->country_code, configFile);
+  alpr.setTopN(tdata->top_n);
 
-      cv::Mat &latestFrame = recData.first;
-      cv::Rect roi = recData.second;
+  RecognitionData recognitionData;
+  while (daemon_active)
+  {
 
-      std::vector<AlprRegionOfInterest> rois;
-      rois.push_back(AlprRegionOfInterest(roi.x, roi.y, roi.width, roi.height));
-
-      AlprResults results;
-      results = alpr.recognize(latestFrame.data, latestFrame.elemSize(), latestFrame.cols, latestFrame.rows, rois);
-
-      if (results.plates.size() > 0)
-      {
-
-        std::stringstream uuid_ss;
-        uuid_ss << tdata->site_id << "-cam" << tdata->camera_id << "-" << getEpochTimeMs();
-    std::string uuid = uuid_ss.str();
-
-    // Save the image to disk (using the UUID)
-    if (tdata->output_images)
+    bool pop = tdata->recognitionQueues[threadNumber].pop(recognitionData);
+    if (!pop)
     {
-      std::stringstream ss;
-// "-thread-" << std::to_string(threadNumber+1) <<
-      ss << tdata->output_image_folder << "/" << uuid << ".jpg";
-
-      cv::imwrite(ss.str(), latestFrame);
+      usleep(10000);
+      continue;
     }
 
-    // Update the JSON content to include UUID and camera ID
+    cv::Mat& latestFrame = recognitionData.first;
+    cv::Rect& roi = recognitionData.second;
 
-    std::string json = alpr.toJson(results);
+    std::vector<AlprRegionOfInterest> rois;
+    rois.push_back(AlprRegionOfInterest(roi.x, roi.y, roi.width, roi.height));
 
-    cJSON *root = cJSON_Parse(json.c_str());
-    cJSON_AddStringToObject(root,	"uuid",		uuid.c_str());
-    cJSON_AddNumberToObject(root,	"camera_id",	tdata->camera_id);
-    cJSON_AddStringToObject(root, 	"site_id", 	tdata->site_id.c_str());
-    cJSON_AddNumberToObject(root,	"img_width",	latestFrame.cols);
-    cJSON_AddNumberToObject(root,	"img_height",	latestFrame.rows);
+    AlprResults results;
+    results = alpr.recognize(latestFrame.data, latestFrame.elemSize(), latestFrame.cols, latestFrame.rows, rois);
 
-        // Add the company ID to the output if configured
-        if (tdata->company_id.length() > 0)
-          cJSON_AddStringToObject(root, 	"company_id", 	tdata->company_id.c_str());
-
-    char *out;
-    out=cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-
-    std::string response(out);
-
-    free(out);
-
-    // Push the results to the Beanstalk queue
-    for (int j = 0; j < results.plates.size(); j++)
+    if (results.plates.size() > 0)
     {
-      LOG4CPLUS_DEBUG(logger, "Writing plate " << results.plates[j].bestPlate.characters << " (" <<  uuid << ") to queue.");
+      saveRecognitionResults(alpr, results, latestFrame, tdata);
     }
+  }
+}
 
-    writeToQueue(response);
-      }
-    }
+bool saveRecognitionResults(const Alpr& alpr, const AlprResults& results, const cv::Mat& latestFrame,const CaptureThreadData * const tdata)
+{
+
+  std::stringstream uuid_ss;
+  int64_t epochTimeMs = getEpochTimeMs();
+  uuid_ss << tdata->site_id << "-cam" << tdata->camera_id << "-" << epochTimeMs;
+  std::string filename_uuid = uuid_ss.str();
+
+  // Save the image to disk (using the UUID)
+  if (tdata->output_images)
+  {
+    std::stringstream ss;
+    // "-thread-" << std::to_string(threadNumber+1) <<
+    ss << tdata->output_image_folder << "/" << filename_uuid << ".jpg";
+
+    cv::imwrite(ss.str(), latestFrame);
+  }
+
+  // Update the JSON content to include UUID and camera ID
+
+  std::string json = alpr.toJson(results);
+
+  cJSON *root = cJSON_Parse(json.c_str());
+  cJSON_AddStringToObject(root, "uuid",		filename_uuid.c_str());
+  cJSON_AddNumberToObject(root, "camera_id",	tdata->camera_id);
+  cJSON_AddStringToObject(root, "site_id", 	tdata->site_id.c_str());
+  cJSON_AddNumberToObject(root, "img_width",	latestFrame.cols);
+  cJSON_AddNumberToObject(root, "img_height",	latestFrame.rows);
+
+  // Add the company ID to the output if configured
+  if (tdata->company_id.length() > 0)
+    cJSON_AddStringToObject(root, 	"company_id", 	tdata->company_id.c_str());
+
+  char *out;
+  out=cJSON_PrintUnformatted(root);
+  cJSON_Delete(root);
+
+  std::string response(out);
+  free(out);
+
+  // Push the results to the Beanstalk queue
+  for (int j = 0; j < results.plates.size(); j++)
+  {
+    LOG4CPLUS_DEBUG(logger, "Writing plate " << results.plates[j].bestPlate.characters << " (" <<  filename_uuid << ") to queue.");
+  }
+
+  writeToQueue(response);
 }
 
 void streamCaptureThread(void* arg)
 {
   CaptureThreadData* tdata = (CaptureThreadData*) arg;
-  
+
   LOG4CPLUS_INFO(logger, "country: " << tdata->country_code << " -- config file: " << tdata->config_file );
   LOG4CPLUS_INFO(logger, "Stream " << tdata->camera_id << ": " << tdata->stream_url);
-  
+
   MotionDetector motiondetector(tdata->motion_mog_history_size, tdata->motion_mog_var_threshold, tdata->motion_mog_detect_shadows,
                                 tdata->motion_debug_show_images);
   motiondetector.setErodeElementSize(tdata->motion_noise_erase_element_size);
   motiondetector.setRoi(cv::Rect(tdata->motion_roi_x, tdata->motion_roi_y, tdata->motion_roi_width, tdata->motion_roi_height));
-  
+
   int framenum = 0;
-  
+
   LoggingVideoBuffer videoBuffer(logger);
-  
   videoBuffer.connect(tdata->stream_url, 5);
-  
+
   cv::Mat latestFrame;
-  
-  std::vector<uchar> buffer;
-  
+
   LOG4CPLUS_INFO(logger, "Starting camera " << tdata->camera_id);
-  
+
   while (daemon_active)
   {
     std::vector<cv::Rect> regionsOfInterest;
     int response = videoBuffer.getLatestFrame(&latestFrame, regionsOfInterest);
-    
+
     if (response != -1)
     {
-      
+
       timespec startTime;
       getTimeMonotonic(&startTime);
-      
+
       cv::Rect roi;
       if (tdata->detect_motion)
       {
-          if (framenum == 0) motiondetector.ResetMotionDetection(&latestFrame);
-          roi = motiondetector.MotionDetect(&latestFrame);
+        if (framenum == 0)
+          motiondetector.ResetMotionDetection(&latestFrame);
+        roi = motiondetector.MotionDetect(&latestFrame);
       }
       else
       {
-          roi = cv::Rect(0,0, latestFrame.cols, latestFrame.rows);
+        roi = cv::Rect(0,0, latestFrame.cols, latestFrame.rows);
       }
 
-      if(roi.area() > 0) { // Todo: add minimum size
+      if (roi.width > tdata->motion_min_width_for_recognition
+              && roi.height > tdata->motion_min_height_for_recognition)
+      {
         tdata->recognitionQueues[0].push(RecognitionData(latestFrame.clone(), roi));
-        if(tdata->recognitionThreadsCount > 1)
-            tdata->recognitionQueues[1].push(RecognitionData(latestFrame.clone(), roi));
+        if (tdata->recognitionThreadsCount > 1)
+          tdata->recognitionQueues[1].push(RecognitionData(latestFrame.clone(), roi));
       }
-    
-    usleep(10000);
-    framenum++;
+
+      usleep(10000);
+      framenum++;
     }
   }
-  
-  
+
+
   videoBuffer.disconnect();
-  
+
   LOG4CPLUS_INFO(logger, "Video processing ended");
-  
+
   delete tdata;
 }
 
@@ -528,13 +549,13 @@ bool writeToQueue(std::string jsonResult)
     client.use(BEANSTALK_TUBE_NAME);
 
     int id = client.put(jsonResult);
-    
+
     if (id <= 0)
     {
       LOG4CPLUS_ERROR(logger, "Failed to write data to queue");
       return false;
     }
-    
+
     LOG4CPLUS_DEBUG(logger, "put job id: " << id );
 
   }
@@ -552,54 +573,51 @@ void dataUploadThread(void* arg)
 {
   CURL *curl;
 
-  
-  /* In windows, this will init the winsock stuff */ 
-  curl_global_init(CURL_GLOBAL_ALL);
-  
-  
-  UploadThreadData* udata = (UploadThreadData*) arg;
-  
 
-  
-  
-  while(daemon_active)
+  /* In windows, this will init the winsock stuff */
+  curl_global_init(CURL_GLOBAL_ALL);
+
+
+  UploadThreadData* udata = (UploadThreadData*) arg;
+
+  while (daemon_active)
   {
     try
     {
-      /* get a curl handle */ 
+      /* get a curl handle */
       curl = curl_easy_init();
       Beanstalk::Client client(BEANSTALK_QUEUE_HOST, BEANSTALK_PORT);
-      
+
       client.watch(BEANSTALK_TUBE_NAME);
-    
+
       while (daemon_active)
       {
-	Beanstalk::Job job;
-	
-	client.reserve(job);
-	
-	if (job.id() > 0)
-	{
-	  //LOG4CPLUS_DEBUG(logger, job.body() );
-	  if (uploadPost(curl, udata->upload_url, job.body()))
-	  {
-	    client.del(job.id());
-	    LOG4CPLUS_INFO(logger, "Job: " << job.id() << " successfully uploaded" );
-	    // Wait 10ms
-	    sleep_ms(10);
-	  }
-	  else
-	  {
-	    client.release(job);
-	    LOG4CPLUS_WARN(logger, "Job: " << job.id() << " failed to upload.  Will retry." );
-	    // Wait 2 seconds
-	    sleep_ms(2000);
-	  }
-	}
-	
+        Beanstalk::Job job;
+
+        client.reserve(job);
+
+        if (job.id() > 0)
+        {
+          //LOG4CPLUS_DEBUG(logger, job.body() );
+          if (uploadPost(curl, udata->upload_url, job.body()))
+          {
+            client.del(job.id());
+            LOG4CPLUS_INFO(logger, "Job: " << job.id() << " successfully uploaded" );
+            // Wait 10ms
+            sleep_ms(10);
+          }
+          else
+          {
+            client.release(job);
+            LOG4CPLUS_WARN(logger, "Job: " << job.id() << " failed to upload.  Will retry." );
+            // Wait 2 seconds
+            sleep_ms(2000);
+          }
+        }
+
       }
-      
-      /* always cleanup */ 
+
+      /* always cleanup */
       curl_easy_cleanup(curl);
     }
     catch (const std::runtime_error& error)
@@ -609,7 +627,7 @@ void dataUploadThread(void* arg)
     // wait 5 seconds
     usleep(5000000);
   }
-  
+
   curl_global_cleanup();
 }
 
@@ -620,36 +638,37 @@ bool uploadPost(CURL* curl, std::string url, std::string data)
   CURLcode res;
   struct curl_slist *headers=NULL; // init to NULL is important
 
-  /* Add the required headers */ 
+  /* Add the required headers */
   headers = curl_slist_append(headers,  "Accept: application/json");
   headers = curl_slist_append( headers, "Content-Type: application/json");
   headers = curl_slist_append( headers, "charsets: utf-8");
- 
-  if(curl) {
-	/* Add the headers */
+
+  if (curl)
+  {
+    /* Add the headers */
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-   
+
     /* First set the URL that is about to receive our POST. This URL can
        just as well be a https:// URL if that is what should receive the
-       data. */ 
+       data. */
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    /* Now specify the POST data */ 
+    /* Now specify the POST data */
     //char* escaped_data = curl_easy_escape(curl, data.c_str(), data.length());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data.c_str());
     //curl_free(escaped_data);
- 
-    /* Perform the request, res will get the return code */ 
+
+    /* Perform the request, res will get the return code */
     res = curl_easy_perform(curl);
-    /* Check for errors */ 
-    if(res != CURLE_OK)
+    /* Check for errors */
+    if (res != CURLE_OK)
     {
       success = false;
     }
- 
+
   }
-  
+
   return success;
 
-  
+
 }
 
