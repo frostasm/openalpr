@@ -30,6 +30,8 @@
 #include <mutex>
 #include <condition_variable>
 
+static log4cplus::Logger logger;
+
 template <typename T>
 class Queue
 {
@@ -74,7 +76,8 @@ private:
   {
     static_assert(maximumSize % 2 == 1, "Mmaximum queue size must be odd");
     static_assert(maximumSize > 50, "Mmaximum queue size to small. must be > 50");
-    std::cout << "Queue reached its maximum size: " << maximumSize << std::endl;
+    LOG4CPLUS_INFO(logger, "Queue reached its maximum size, half of the items will be deleted." << std::endl
+                           << "Current queue size: " << queue.size());
     std::queue<T> qOdd;
     while (!queue.empty())
     {
@@ -202,8 +205,6 @@ void segfault_handler(int sig)
 
 bool daemon_active;
 
-static log4cplus::Logger logger;
-
 int main( int argc, const char** argv )
 {
   signal(SIGSEGV, segfault_handler);   // install our segfault handler
@@ -329,12 +330,20 @@ int main( int argc, const char** argv )
     return 1;
   }
 
+  bool outputImages = ini.GetBoolValue("daemon", "store_plates", false);
   std::string imageFolder = ini.GetValue("daemon", "store_plates_location", "/tmp/");
+
   bool uploadData = ini.GetBoolValue("daemon", "upload_data", false);
   std::string upload_url = ini.GetValue("daemon", "upload_address", "");
 
   LOG4CPLUS_INFO(logger, "Using: " << daemonConfigFile << " for daemon configuration");
-  LOG4CPLUS_INFO(logger, "Using: " << imageFolder << " for storing valid plate images");
+
+  if(outputImages)
+    LOG4CPLUS_INFO(logger, "Using: " << imageFolder << " for storing valid plate images");
+
+  if(uploadData)
+    LOG4CPLUS_INFO(logger, "Using: " << upload_url << " for uploading valid plates data");
+
 
   pid_t pid;
 
@@ -356,7 +365,8 @@ int main( int argc, const char** argv )
       recognition_thread = new tthread::thread(platesRecognitionThread, (void*) tdata);
       if (fileExists(openAlprConfigFile2.c_str()))
       {
-        std::cout << "Start second recognition thread;" << std::endl;
+        LOG4CPLUS_INFO(logger, "Start second recognition thread;");
+
         recognition_thread = new tthread::thread(platesRecognitionThread, (void*) tdata);
       }
 
@@ -396,6 +406,7 @@ void platesRecognitionThread(void* arg)
 
   CaptureThreadData* tdata = (CaptureThreadData*) arg;
   std::string configFile = tdata->config_file+std::to_string(threadNumber+1);
+  LOG4CPLUS_INFO(logger, "Recognition thread(" << threadNumber+1 << ") load config: " << configFile);
 
   Alpr alpr(tdata->country_code, configFile);
   alpr.setTopN(tdata->top_n);
