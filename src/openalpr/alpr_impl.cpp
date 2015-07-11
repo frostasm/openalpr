@@ -278,7 +278,8 @@ namespace alpr
       cout << "Total Time to process image: " << diffclock(startTime, endTime) << "ms." << endl;
     }
 
-    if (config->debugGeneral && config->debugShowImages)
+
+    if (config->debugGeneral && config->debugDrawRects)
     {
       for (unsigned int i = 0; i < regionsOfInterest.size(); i++)
       {
@@ -311,13 +312,14 @@ namespace alpr
           line(img, Point(details.corners[3].x, details.corners[3].y), Point(details.corners[0].x, details.corners[0].y), Scalar(0,255,0), 1);
         }
       }
+    }
 
-
+    if (config->debugGeneral && config->debugShowImages)
+    {
       displayImage(config, "Main Image", img);
 
       // Sleep 1ms
       sleep_ms(1);
-
     }
 
 

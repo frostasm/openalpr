@@ -121,6 +121,7 @@ namespace alpr
       bool debugColorFiler;
       bool debugOcr;
       bool debugPostProcess;
+      bool debugDrawRects;
       bool debugShowImages;
       bool debugPauseOnFrame;
 

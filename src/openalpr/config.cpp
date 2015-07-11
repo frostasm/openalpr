@@ -197,6 +197,7 @@ namespace alpr
     debugColorFiler = 	getBoolean(ini, "", "debug_color_filter", 	false);
     debugOcr = 		getBoolean(ini, "", "debug_ocr", 		false);
     debugPostProcess = 	getBoolean(ini, "", "debug_postprocess", 	false);
+    debugDrawRects = 	getBoolean(ini, "", "debug_draw_rects",	false);
     debugShowImages = 	getBoolean(ini, "", "debug_show_images",	false);
     debugPauseOnFrame = 	getBoolean(ini, "", "debug_pause_on_frame",	false);
 
