@@ -37,16 +37,13 @@ class Queue
   bool pop(T& item)
   {
     std::unique_lock<std::mutex> mlock(mutex_);
-    if(queue_.empty()) {
+    if(queue.empty()) {
         return false;
     }
     else
     {
-        item = queue_.front();
-        queue_.pop();
-        if(queue_.size() % 100 == 0 && queue_.size() )
-            std::cout << "pop item: " << queue_.size() << std::endl;
-
+        item = queue.front();
+        queue.pop();
         return true;
     }
   }
@@ -54,32 +51,50 @@ class Queue
   void push(const T& item)
   {
     std::unique_lock<std::mutex> mlock(mutex_);
-    queue_.push(item);
-    if(queue_.size() % 100 == 0)
-        std::cout << "push item: " << queue_.size() << std::endl;
+
+    if(queue.size() > maximumSize)
+        removeOddItems();
+
+    queue.push(item);
+
     mlock.unlock();
     cond_.notify_one();
   }
+
   Queue()=default;
   Queue(const Queue&) = delete;            // disable copying
   Queue& operator=(const Queue&) = delete; // disable assignment
 
  private:
-  // TODO: add limit realization
-  int limit = 200;
 
-  std::queue<T> queue_;
+  static const int maximumSize = 101; // ! Must be odd
+  void removeOddItems() {
+      static_assert(maximumSize % 2 == 1, "Mmaximum queue size must be odd");
+      static_assert(maximumSize > 50, "Mmaximum queue size to small. must be > 50");
+      std::cout << "Queue reached its maximum size: " << maximumSize << std::endl;
+      std::queue<T> qOdd;
+      while(!queue.empty()) {
+          qOdd.push(queue.front());
+          queue.pop();
+          queue.pop();
+      }
+
+      queue.swap(qOdd);
+  }
+
+  std::queue<T> queue;
   std::mutex mutex_;
   std::condition_variable cond_;
 };
-typedef std::pair<cv::Mat, cv::Rect> RecognizeData;
-typedef Queue<RecognizeData> RecognizeQueue;
+
+typedef std::pair<cv::Mat, cv::Rect> RecognitionData;
+typedef Queue<RecognitionData> RecognitionQueue;
 
 using namespace alpr;
 
 // prototypes
 void streamCaptureThread(void* arg);
-void streamRecognitionThread(void* arg);
+void platesRecognitionThread(void* arg);
 bool writeToQueue(std::string jsonResult);
 bool uploadPost(CURL* curl, std::string url, std::string data);
 void dataUploadThread(void* arg);
@@ -96,8 +111,8 @@ const std::string BEANSTALK_TUBE_NAME="alprd";
 
 struct CaptureThreadData
 {
-  RecognizeQueue recognizingQueues[2];
-  int recognizersCount;
+  RecognitionQueue recognitionQueues[2];
+  int recognitionThreadsCount;
 
   std::string company_id;
   std::string stream_url;
@@ -231,7 +246,7 @@ int main( int argc, const char** argv )
 
   std::string daemonConfigFile = configDir + ALPRD_CONFIG_FILE_NAME;
   
-  int recognizersCount = fileExists(openAlprConfigFile2.c_str()) ? 2 : 1;
+  int recognitionThreadsCount = fileExists(openAlprConfigFile2.c_str()) ? 2 : 1;
 
   // Validate that the configuration files exist
   if (fileExists(openAlprConfigFile1.c_str()) == false)
@@ -322,15 +337,15 @@ int main( int argc, const char** argv )
       tdata->camera_id = i + 1;
       tdata->config_file = openAlprConfigFile;
       tdata->clock_on = clockOn;
-      tdata->recognizersCount = recognizersCount;
+      tdata->recognitionThreadsCount = recognitionThreadsCount;
 
 
-      tthread::thread* thread_recognize;
-      thread_recognize = new tthread::thread(streamRecognitionThread, (void*) tdata);
+      tthread::thread* recognition_thread;
+      recognition_thread = new tthread::thread(platesRecognitionThread, (void*) tdata);
       if (fileExists(openAlprConfigFile2.c_str()))
       {
           std::cout << "start second thread;" << std::endl;
-        thread_recognize = new tthread::thread(streamRecognitionThread, (void*) tdata);
+        recognition_thread = new tthread::thread(platesRecognitionThread, (void*) tdata);
       }
 
       usleep(10000);
@@ -359,7 +374,7 @@ int main( int argc, const char** argv )
 }
 
 unsigned char recognitionThreadsCounter = 0;
-void streamRecognitionThread(void* arg)
+void platesRecognitionThread(void* arg)
 {
 
     int threadNumber = recognitionThreadsCounter;
@@ -370,10 +385,10 @@ void streamRecognitionThread(void* arg)
     std::cout << "Load config: " << configFile  << std::endl;
     Alpr alpr(tdata->country_code, configFile);
     alpr.setTopN(tdata->top_n);
-    RecognizeData recData;
+    RecognitionData recData;
   while (daemon_active) {
 
-      bool pop = tdata->recognizingQueues[threadNumber].pop(recData);
+      bool pop = tdata->recognitionQueues[threadNumber].pop(recData);
       if(!pop) {
           usleep(1000);
           continue;
@@ -486,9 +501,9 @@ void streamCaptureThread(void* arg)
       }
 
       if(roi.area() > 0) { // Todo: add minimum size
-        tdata->recognizingQueues[0].push(RecognizeData(latestFrame.clone(), roi));
-        if(tdata->recognizersCount > 1)
-            tdata->recognizingQueues[1].push(RecognizeData(latestFrame.clone(), roi));
+        tdata->recognitionQueues[0].push(RecognitionData(latestFrame.clone(), roi));
+        if(tdata->recognitionThreadsCount > 1)
+            tdata->recognitionQueues[1].push(RecognitionData(latestFrame.clone(), roi));
       }
     
     usleep(10000);
